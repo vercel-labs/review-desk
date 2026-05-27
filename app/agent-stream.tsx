@@ -14,7 +14,7 @@ const TOOL_LABELS: Record<string, string> = {
   getAuthorHistory: "Pulling author history",
   findSimilarReports: "Searching prior cases",
   lookupPolicy: "Checking guidelines",
-  submitTriage: "Finalizing decision",
+  submitTriage: "Preparing recommendation",
 };
 
 export function AgentStream({ postId }: { postId: string }) {
@@ -47,10 +47,12 @@ export function AgentStream({ postId }: { postId: string }) {
     };
   }, [postId, router]);
 
+  const label = done ? "Waiting for moderator" : "Agent running";
+
   return (
     <aside className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-4">
       <div className="text-xs font-medium uppercase text-blue-700">
-        Agent {done ? "done" : "running"}
+        Agent {label}
       </div>
       <ToolCallList calls={calls} order={order} />
     </aside>
