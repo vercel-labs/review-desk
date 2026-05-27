@@ -1,10 +1,18 @@
-import { getWritable } from "workflow";
+import { createHook, getWritable, sleep } from "workflow";
 import { hasToolCall, type UIMessageChunk } from "ai";
 
 import { executeAction } from "@/lib/actions";
+import {
+  markModCardResolved,
+  postModCard,
+  postModThreadReply,
+} from "@/lib/post-mod-card";
 import { appendAudit, getPost, setPostStatus } from "@/lib/db";
 import { createTriageAgent } from "@/lib/triage-agent";
-import type { Post, TriageOutput } from "@/lib/types";
+import { hookTokenForPost } from "@/lib/types";
+import type { ActionId, Post, TriageOutput } from "@/lib/types";
+
+const HUMAN_TIMEOUT = "48h";
 
 export async function triagePostWorkflow(postId: string): Promise<void> {
   "use workflow";
@@ -48,10 +56,48 @@ async function applyTriageDecision(
       }
       await pingStatusChange(postId);
     } else {
-      await keepUnderReviewForHuman(postId, triage);
+      await askHumanModerator(postId, triage);
       await pingStatusChange(postId);
     }
   }
+}
+
+async function askHumanModerator(postId: string, triage: TriageOutput) {
+  const hookToken = hookTokenForPost(postId);
+  const hook = createHook<{ action: ActionId; moderator: string }>({
+    token: hookToken,
+  });
+
+  const modCard = await postModCard({ postId, triage, hookToken });
+  await pingStatusChange(postId);
+
+  const decision = await Promise.race([
+    hook,
+    sleep(HUMAN_TIMEOUT).then(() => ({
+      action: "dismiss" as ActionId,
+      moderator: "system",
+    })),
+  ]);
+
+  await executeAction(
+    postId,
+    decision.action,
+    triage.draftedWarning,
+    decision.moderator,
+  );
+  await pingStatusChange(postId);
+
+  await markModCardResolved({
+    ...modCard,
+    moderator: decision.moderator,
+    action: decision.action,
+  });
+
+  await postModThreadReply({
+    threadId: modCard.threadId,
+    moderator: decision.moderator,
+    action: decision.action,
+  });
 }
 
 async function runTriageAgent(post: Post): Promise<TriageOutput | undefined> {
