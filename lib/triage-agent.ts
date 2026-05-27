@@ -1,4 +1,4 @@
-import { ToolLoopAgent, tool, hasToolCall } from "ai";
+import { DurableAgent } from "@workflow/ai/agent";
 import { z } from "zod";
 
 import {
@@ -62,18 +62,12 @@ clearly safe posts like a greeting , call \`submitTriage\` with the complete dec
 Do not narrate, do not summarize, do not output text. The submitTriage call is your
 ONLY way to finish; the workflow stops listening once it lands.`;
 
-export async function runTriage({
-  authorId,
-  body,
-}: {
-  authorId: string;
-  body: string;
-}): Promise<TriageOutput | undefined> {
-  const agent = new ToolLoopAgent({
+export function createTriageAgent() {
+  return new DurableAgent({
     model: TRIAGE_MODEL,
     instructions: TRIAGE_INSTRUCTIONS,
     tools: {
-      getAuthorHistory: tool({
+      getAuthorHistory: {
         description:
           "Look up the author's moderation history: account age, prior strikes, recent actions, overall tone.",
         inputSchema: z.object({
@@ -82,16 +76,16 @@ export async function runTriage({
             .describe("Internal user ID of the post's author."),
         }),
         execute: getAuthorHistory,
-      }),
-      findSimilarReports: tool({
+      },
+      findSimilarReports: {
         description:
           "Find up to 3 prior moderation cases similar to the post, with their outcomes.",
         inputSchema: z.object({
           text: z.string().describe("The post body to find similar cases for."),
         }),
         execute: findSimilarReports,
-      }),
-      lookupPolicy: tool({
+      },
+      lookupPolicy: {
         description: "Look up the community-guidelines section for a category.",
         inputSchema: z.object({
           category: z
@@ -101,32 +95,13 @@ export async function runTriage({
             ),
         }),
         execute: lookupPolicy,
-      }),
-      submitTriage: tool({
+      },
+      submitTriage: {
         description:
-          "Submit your final triage decision. This is your last action, call it " +
-          "exactly once, with the complete triage object. After this call the app " +
-          "will route the post (auto-resolve or escalate to a human moderator).",
+          "Submit your final triage decision. This is your last action, call it exactly once.",
         inputSchema: TriageSchema,
-        execute: async (triage: TriageOutput) => {
-          // Identity tool. The model's input is the triage decision.
-          return triage;
-        },
-      }),
+        execute: async (triage: TriageOutput) => triage,
+      },
     },
-    stopWhen: hasToolCall("submitTriage"),
   });
-
-  const result = await agent.generate({
-    prompt:
-      `Triage this forum post.\n\n` +
-      `Author ID: ${authorId}\n` +
-      `Body:\n"""\n${body}\n"""`,
-  });
-
-  const submitCall = result.steps
-    .flatMap((step) => step.toolCalls)
-    .find((call) => call.toolName === "submitTriage");
-
-  return submitCall?.input as TriageOutput | undefined;
 }

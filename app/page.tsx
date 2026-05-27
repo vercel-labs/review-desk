@@ -1,22 +1,26 @@
-import { runTriage } from "@/lib/triage-agent";
+import { getAuditForPost, listPosts, listUsers } from "@/lib/db";
+import { AgentStream } from "./agent-stream";
+import { clearForum, submitPost } from "./actions";
 
-const decisionTone = {
-  safe: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  auto_hide: "border-amber-200 bg-amber-50 text-amber-700",
-  auto_warn: "border-amber-200 bg-amber-50 text-amber-700",
-  request_ban: "border-red-200 bg-red-50 text-red-700",
-  second_opinion: "border-blue-200 bg-blue-50 text-blue-700",
+export const dynamic = "force-dynamic";
+
+const statusTone = {
+  live: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  under_review: "border-blue-200 bg-blue-50 text-blue-700",
+  hidden: "border-red-200 bg-red-50 text-red-700",
+  warned: "border-amber-200 bg-amber-50 text-amber-700",
+  hidden_and_warned: "border-red-200 bg-red-50 text-red-700",
 } as const;
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ authorId?: string; body?: string }>;
-}) {
-  const params = await searchParams;
-  const body = params.body?.trim() ?? "";
-  const authorId = params.authorId?.trim() || "u_preview";
-  const triage = body ? await runTriage({ authorId, body }) : undefined;
+export default async function Home() {
+  const [users, posts] = await Promise.all([listUsers(), listPosts()]);
+  const auditByPost = Object.fromEntries(
+    await Promise.all(
+      posts.map(
+        async (post) => [post.id, await getAuditForPost(post.id)] as const,
+      ),
+    ),
+  );
 
   return (
     <main className="min-h-screen bg-neutral-50 px-6 py-10 text-neutral-950">
@@ -24,30 +28,37 @@ export default async function Home({
         <header className="space-y-2">
           <p className="text-sm font-medium text-neutral-500">Review Desk</p>
           <h1 className="text-3xl font-semibold tracking-tight">
-            Preview a moderation decision
+            Moderate forum posts with the AI SDK
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-neutral-600">
-            Paste a forum post and the AI SDK triage agent will return the
-            structured decision the workflow will use later.
+            Submit a post, run AI SDK triage, and persist the moderation state
+            in Redis.
           </p>
         </header>
 
-        <form className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+        <form
+          action={submitPost}
+          className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm"
+        >
           <div className="grid gap-4">
             <label className="grid gap-2 text-sm font-medium text-neutral-700">
-              Author ID
-              <input
+              Author
+              <select
                 name="authorId"
-                defaultValue={authorId}
                 className="h-10 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-950 outline-none transition focus:border-neutral-950 focus:ring-2 focus:ring-neutral-950/10"
-              />
+              >
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.id})
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="grid gap-2 text-sm font-medium text-neutral-700">
               Post
               <textarea
                 name="body"
-                defaultValue={body}
-                rows={5}
+                rows={4}
                 className="resize-none rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm leading-6 text-neutral-950 outline-none transition focus:border-neutral-950 focus:ring-2 focus:ring-neutral-950/10"
               />
             </label>
@@ -55,86 +66,100 @@ export default async function Home({
               type="submit"
               className="inline-flex h-10 w-fit items-center rounded-md bg-neutral-950 px-4 text-sm font-medium text-white transition hover:bg-neutral-800"
             >
-              Preview triage
+              Submit for moderation
             </button>
           </div>
         </form>
 
-        {triage ? (
-          <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">Agent decision</h2>
-                <p className="mt-1 text-sm text-neutral-500">
-                  Confidence {(triage.confidence * 100).toFixed(0)}%
-                </p>
-              </div>
-              <span
-                className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                  decisionTone[triage.decision]
-                }`}
+        <section className="rounded-lg border border-neutral-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+            <div>
+              <h2 className="text-lg font-semibold">Posts</h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                {posts.length} {posts.length === 1 ? "post" : "posts"}
+              </p>
+            </div>
+            <form action={clearForum}>
+              <button
+                type="submit"
+                className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50"
+                disabled={posts.length === 0}
               >
-                {triage.decision.replaceAll("_", " ")}
-              </span>
-            </div>
+                Clear forum
+              </button>
+            </form>
+          </div>
 
-            <dl className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md bg-neutral-50 p-3">
-                <dt className="text-xs font-medium uppercase text-neutral-500">
-                  Severity
-                </dt>
-                <dd className="mt-1 text-sm font-medium">{triage.severity}</dd>
-              </div>
-              <div className="rounded-md bg-neutral-50 p-3">
-                <dt className="text-xs font-medium uppercase text-neutral-500">
-                  Category
-                </dt>
-                <dd className="mt-1 text-sm font-medium">{triage.category}</dd>
-              </div>
-              <div className="rounded-md bg-neutral-50 p-3">
-                <dt className="text-xs font-medium uppercase text-neutral-500">
-                  Next step
-                </dt>
-                <dd className="mt-1 text-sm font-medium">
-                  {triage.humanRequest ? "Ask moderator" : "Apply decision"}
-                </dd>
-              </div>
-            </dl>
-
-            <div className="mt-5 rounded-md border border-neutral-200 p-4">
-              <p className="text-xs font-medium uppercase text-neutral-500">
-                Reasoning
+          {posts.length === 0 ? (
+            <div className="px-5 py-12 text-center">
+              <p className="text-sm font-medium text-neutral-700">
+                No posts yet
               </p>
-              <p className="mt-2 text-sm leading-6 text-neutral-700">
-                {triage.reasoning}
+              <p className="mt-1 text-sm text-neutral-500">
+                Submit a safe, obvious, or borderline post to test the agent.
               </p>
             </div>
+          ) : (
+            <ol className="divide-y divide-neutral-200">
+              {posts.map((post) => {
+                const audit = auditByPost[post.id] ?? [];
 
-            {triage.humanRequest ? (
-              <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-4">
-                <p className="text-xs font-medium uppercase text-blue-700">
-                  Moderator question
-                </p>
-                <p className="mt-2 text-sm leading-6 text-blue-950">
-                  {triage.humanRequest}
-                </p>
-              </div>
-            ) : null}
+                return (
+                  <li key={post.id} className="px-5 py-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <p className="max-w-2xl text-sm leading-6 text-neutral-800">
+                        {post.body}
+                      </p>
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                          statusTone[post.status]
+                        }`}
+                      >
+                        {post.status.replaceAll("_", " ")}
+                      </span>
+                    </div>
 
-            {triage.actionOptions?.length ? (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {triage.actionOptions.map((option) => (
-                  <span
-                    key={option.action}
-                    className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700"
-                  >
-                    {option.label}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </section>
-        ) : null}
+                    {post.status === "under_review" && post.runId ? (
+                      <AgentStream postId={post.id} />
+                    ) : null}
+
+                    <details className="mt-4">
+                      <summary className="cursor-pointer text-sm font-medium text-neutral-700">
+                        Audit log
+                      </summary>
+                      {audit.length === 0 ? (
+                        <p className="mt-2 text-sm text-neutral-500">
+                          No audit entries yet.
+                        </p>
+                      ) : (
+                        <ol className="mt-3 grid gap-2">
+                          {audit.map((entry) => (
+                            <li
+                              key={entry.id}
+                              className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-700"
+                            >
+                              <span className="font-medium">
+                                {entry.action}
+                              </span>
+                              <span className="text-neutral-500"> by </span>
+                              <span>{entry.actorId}</span>
+                              {entry.note ? (
+                                <span className="text-neutral-500">
+                                  {" "}
+                                  · {entry.note}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </details>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </section>
       </div>
     </main>
   );
