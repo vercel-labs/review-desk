@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@chat-adapter/slack": "^4.29.0",
-    "@chat-adapter/state-memory": "^4.29.0",
+    "@chat-adapter/state-redis": "^4.29.0",
     "@upstash/redis": "^1.38.0",
     "@workflow/ai": "^4.1.2",
     "@workflow/next": "^4.0.6",

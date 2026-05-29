@@ -26,20 +26,22 @@ AI_GATEWAY_API_KEY=
 
 KV_REST_API_URL=
 KV_REST_API_TOKEN=
+REDIS_URL=
 
 SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
 SLACK_MOD_QUEUE_CHANNEL_ID=
 ```
 
-| Variable                     | Required                                     | Used by                 | Notes                                                                                                                   |
-| ---------------------------- | -------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `AI_GATEWAY_API_KEY`         | Yes                                          | `@workflow/ai` / AI SDK | Authenticates model calls for the triage agent. The app currently uses `anthropic/claude-haiku-4.5` through AI Gateway. |
-| `KV_REST_API_URL`            | Yes, unless using `UPSTASH_REDIS_REST_URL`   | `@upstash/redis`        | Redis REST URL. Vercel KV/Redis integrations usually provide this automatically.                                        |
-| `KV_REST_API_TOKEN`          | Yes, unless using `UPSTASH_REDIS_REST_TOKEN` | `@upstash/redis`        | Redis REST token. Keep this secret.                                                                                     |
-| `SLACK_BOT_TOKEN`            | Yes                                          | `@chat-adapter/slack`   | Slack bot token, usually starting with `xoxb-`. The bot posts moderation cards and replies.                             |
-| `SLACK_SIGNING_SECRET`       | Yes                                          | `@chat-adapter/slack`   | Verifies incoming Slack interactivity webhook requests.                                                                 |
-| `SLACK_MOD_QUEUE_CHANNEL_ID` | Yes                                          | `lib/post-mod-card.ts`  | Slack channel ID where escalated moderation cards are posted, for example `C0123456789`.                                |
+| Variable                     | Required                                     | Used by                     | Notes                                                                                                                   |
+| ---------------------------- | -------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `AI_GATEWAY_API_KEY`         | Yes                                          | `@workflow/ai` / AI SDK     | Authenticates model calls for the triage agent. The app currently uses `anthropic/claude-haiku-4.5` through AI Gateway. |
+| `KV_REST_API_URL`            | Yes, unless using `UPSTASH_REDIS_REST_URL`   | `@upstash/redis`            | Redis REST URL for forum posts and audit data. Vercel KV/Redis integrations usually provide this automatically.         |
+| `KV_REST_API_TOKEN`          | Yes, unless using `UPSTASH_REDIS_REST_TOKEN` | `@upstash/redis`            | Redis REST token. Keep this secret.                                                                                     |
+| `REDIS_URL`                  | Yes                                          | `@chat-adapter/state-redis` | Redis connection URL for Chat SDK state, locks, dedupe, and subscriptions. Upstash provides this separately from REST.   |
+| `SLACK_BOT_TOKEN`            | Yes                                          | `@chat-adapter/slack`       | Slack bot token, usually starting with `xoxb-`. The bot posts moderation cards and replies.                             |
+| `SLACK_SIGNING_SECRET`       | Yes                                          | `@chat-adapter/slack`       | Verifies incoming Slack interactivity webhook requests.                                                                 |
+| `SLACK_MOD_QUEUE_CHANNEL_ID` | Yes                                          | `lib/post-mod-card.ts`      | Slack channel ID where escalated moderation cards are posted, for example `C0123456789`.                                |
 
 ## Slack Setup
 
@@ -62,6 +64,7 @@ The deploy button pre-prompts for the required AI Gateway, Redis, and Slack vari
 Recommended Vercel setup:
 
 - Add a Vercel Redis or Upstash Redis integration so Redis REST variables are available.
+- Add the Redis connection URL as `REDIS_URL` for Chat SDK state.
 - Add `AI_GATEWAY_API_KEY` for model access.
 - Add the Slack variables listed above.
 - After the first deployment, update the Slack interactivity request URL to the production domain.

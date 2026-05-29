@@ -1,16 +1,26 @@
 import { createSlackAdapter } from "@chat-adapter/slack";
-import { createMemoryState } from "@chat-adapter/state-memory";
+import { createRedisState } from "@chat-adapter/state-redis";
 import { Chat, type Author } from "chat";
 import { resumeHook } from "workflow/api";
 
 import { ActionIdSchema, ALL_MOD_ACTION_IDS } from "./types";
 
 const adapters = { slack: createSlackAdapter() };
+const redisUrl =
+  process.env.REDIS_URL ?? process.env.KV_URL ?? process.env.UPSTASH_REDIS_URL;
+
+if (!redisUrl) {
+  throw new Error(
+    "Redis state requires REDIS_URL, KV_URL, or UPSTASH_REDIS_URL. " +
+      "Upstash REST variables are used by @upstash/redis, but " +
+      "@chat-adapter/state-redis requires a Redis connection URL.",
+  );
+}
 
 export const bot = new Chat({
   userName: "review-desk",
   adapters,
-  state: createMemoryState(),
+  state: createRedisState({ url: redisUrl, keyPrefix: "review-desk:chat" }),
   logger: "info",
 });
 
